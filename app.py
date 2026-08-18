@@ -1,21 +1,30 @@
+import subprocess
+import sys
+
+# Instalación forzada en tiempo de ejecución para evitar el ModuleNotFoundError
+try:
+    import google.generativeai as genai
+except ImportError:
+    subprocess.check_call([sys.executable, "-m", "pip", "install", "google-generativeai"])
+    import google.generativeai as genai
+
 import streamlit as st
-import google.generativeai as genai
 import tempfile
 import os
 
-# Configuración de la página
+# Configuración de la interfaz
 st.set_page_config(page_title="Evaluador de Anteproyectos", page_icon="📝", layout="wide")
 
 st.title("📝 Evaluador Rápido de Anteproyectos - TG1")
-st.write("Sube el PDF de un grupo para analizarlo automáticamente con los criterios de evaluación.")
+st.write("Sube el PDF de un grupo para analizarlo automáticamente con tus criterios.")
 
-# Ingreso seguro de la API Key en la barra lateral
+# Barra lateral para la API Key
 with st.sidebar:
     st.header("Configuración")
     api_key = st.text_input("Ingresa tu Gemini API Key:", type="password")
-    st.markdown("[Obtener API Key de Google](https://aistudio.google.com/)")
+    st.markdown("[Obtener API Key gratis en AI Studio](https://aistudio.google.com/)")
 
-# Prompt con las reglas del profesor
+# Prompt del profesor
 CRITERIOS_PROFESOR = """
 Actúa como un profesor riguroso de Trabajo de Grado 1 para las carreras de Ingeniería Industrial y Desarrollo de Software.
 Revisa el anteproyecto en PDF adjunto y genera un reporte breve y directo estructurado de la siguiente manera:
@@ -40,29 +49,26 @@ if uploaded_file is not None:
         st.warning("Por favor ingresa tu API Key de Gemini en el panel lateral para continuar.")
     else:
         if st.button("🔍 Analizar Anteproyecto"):
-            with st.spinner("Procesando y analizando el documento con la API..."):
+            with st.spinner("Procesando y analizando el documento..."):
                 try:
-                    # Configurar la API
                     genai.configure(api_key=api_key)
                     
-                    # Guardar temporalmente el PDF subido
+                    # Guardar archivo temporal
                     with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
                         tmp_file.write(uploaded_file.getvalue())
                         tmp_path = tmp_file.name
 
-                    # Subir el archivo a la File API de Gemini
+                    # Enviar a Gemini API
                     archivo_gemini = genai.upload_file(tmp_path)
-                    
-                    # Generar la evaluación
                     model = genai.GenerativeModel("gemini-1.5-flash")
                     response = model.generate_content([CRITERIOS_PROFESOR, archivo_gemini])
                     
-                    # Eliminar el archivo temporal local
+                    # Limpiar archivo temporal local
                     os.remove(tmp_path)
                     
-                    # Mostrar resultados
+                    # Resultados
                     st.success("Análisis completado:")
                     st.markdown(response.text)
 
                 except Exception as e:
-                    st.error(f"Ocurrió un error al analizar el documento: {e}")
+                    st.error(f"Error durante el análisis: {e}")
