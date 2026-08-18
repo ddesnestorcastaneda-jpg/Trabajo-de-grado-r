@@ -1,78 +1,66 @@
 import streamlit as st
-import google.generativeai as genai
+from google import genai
 import tempfile
 import os
 
-# 1. Configuración general de la página
-st.set_page_config(
-    page_title="Evaluador de Anteproyectos TG1", 
-    page_icon="📝", 
-    layout="wide"
-)
+# Configuración de la página
+st.set_page_config(page_title="Evaluador de Anteproyectos", page_icon="📝")
 
 st.title("📝 Evaluador Rápido de Anteproyectos - Trabajo de Grado 1")
 st.write("Herramienta de revisión automatizada para Ingeniería Industrial y Desarrollo de Software.")
 
-# 2. Barra lateral para ingresar la API Key
-with st.sidebar:
-    st.header("⚙️ Configuración")
-    api_key = st.text_input("Ingresa tu Gemini API Key:", type="password")
-    st.markdown("[👉 Obtener API Key gratis en Google AI Studio](https://aistudio.google.com/)")
-    st.markdown("---")
-    st.caption("Asegúrate de ingresar la clave para iniciar el análisis.")
+# Barra lateral para la API Key
+st.sidebar.header("Configuración")
+api_key = st.sidebar.text_input("Ingresa tu API Key de Gemini:", type="password")
 
-# 3. Prompt con los criterios del profesor
-CRITERIOS_PROFESOR = """
-Actúa como un profesor riguroso de Trabajo de Grado 1 para las carreras de Ingeniería Industrial y Desarrollo de Software.
-Revisa el anteproyecto en PDF adjunto y genera un reporte breve y directo estructurado de la siguiente manera:
+# Subida del archivo
+archivo_subido = st.file_uploader("Arrastra o selecciona el archivo PDF del anteproyecto", type=["pdf"])
 
-1. ESTADO GENERAL: (Aprobado / Requiere Ajustes / Rechazado)
-2. CUMPLIMIENTO DE CHECKLIST:
-   - Título y Formato: (Pasa / No pasa + observación corta)
-   - Planteamiento del Problema: (Pasa / No pasa + observación corta)
-   - Objetivos (General y Específicos): Verificar si el Objetivo 1 es de diagnóstico. (Pasa / No pasa + observación)
-   - Justificación y Alcance: (Pasa / No pasa + observación)
-   - Metodología e Instrumentos: (Pasa / No pasa + observación)
-3. CORRECCIONES CRÍTICAS PARA ESTA SEMANA: (Máximo 3 puntos clave que deben corregir de inmediato antes de aplicar instrumentos)
-
-Sé directo, constructivo y enfócate en la coherencia técnica de ingeniería y software.
-"""
-
-# 4. Componente para subir el PDF del anteproyecto
-uploaded_file = st.file_uploader(
-    "Arrastra o selecciona el archivo PDF del anteproyecto", 
-    type=["pdf"]
-)
-
-# 5. Lógica de procesamiento y evaluación
-if uploaded_file is not None:
+# Botón de análisis
+if st.button("🔍 Analizar Anteproyecto"):
     if not api_key:
-        st.warning("⚠️ Por favor ingresa tu API Key de Gemini en el panel lateral para continuar.")
+        st.error("❌ Por favor, ingresa tu API Key en el panel lateral.")
+    elif not archivo_subido:
+        st.error("❌ Por favor, sube un archivo PDF para analizar.")
     else:
-        if st.button("🔍 Analizar Anteproyecto", type="primary"):
-            with st.spinner("Procesando y analizando el documento con la API de Gemini..."):
-                try:
-                    # Configurar la API Key
-                    genai.configure(api_key=api_key)
-                    
-                    # Guardar el PDF temporalmente en el servidor
-                    with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
-                        tmp_file.write(uploaded_file.getvalue())
-                        tmp_path = tmp_file.name
+        with st.spinner("Analizando el anteproyecto... esto puede tardar unos segundos."):
+            try:
+                # 1. Inicializar el NUEVO cliente con tu API Key "AQ..."
+                client = genai.Client(api_key=api_key)
 
-                    # Subir el PDF a la API de Gemini
-                    archivo_gemini = genai.upload_file(tmp_path)
-                    
-                    # Generar la evaluación con el modelo Gemini 1.5 Flash
-                    model = genai.GenerativeModel("gemini-1.5-flash")
-                    response = model.generate_content([CRITERIOS_PROFESOR, archivo_gemini])
-                    
-                    # Eliminar el archivo temporal local
-                    os.remove(tmp_path)
-                    
-                    # Mostrar resultados en pantalla
-                    st.success("✅ Análisis completado con éxito:")
-                    st.markdown(response.text)
+                # 2. Guardar el PDF subido en un archivo temporal
+                with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as tmp_file:
+                    tmp_file.write(archivo_subido.getvalue())
+                    ruta_temporal = tmp_file.name
 
-                except Exception as e:
-                    st.error(f"❌ Ocurrió un error durante el análisis: {e}")
+                # 3. Subir el archivo a los servidores de Gemini usando el nuevo cliente
+                archivo_gemini = client.files.upload(file=ruta_temporal, mime_type="application/pdf")
+
+                # 4. Prompt: Aquí puedes ajustar las instrucciones para el evaluador
+                prompt = """
+                Eres un profesor estricto pero constructivo que evalúa anteproyectos de grado 
+                para estudiantes de Ingeniería Industrial y Desarrollo de Software. 
+                Analiza este documento y entrégame:
+                1. Un resumen breve.
+                2. Puntos fuertes del anteproyecto.
+                3. Debilidades o áreas de mejora metodológica.
+                4. Veredicto preliminar (Aprobado, Requiere Cambios, Rechazado).
+                """
+
+                # 5. Generar la respuesta usando el modelo (Flash es ideal para textos largos)
+                response = client.models.generate_content(
+                    model='gemini-1.5-flash',
+                    contents=[archivo_gemini, prompt]
+                )
+
+                # 6. Mostrar los resultados
+                st.success("¡Análisis Completado!")
+                st.markdown("---")
+                st.markdown(response.text)
+
+                # 7. Limpieza: Borrar el archivo temporal de tu servidor por seguridad
+                os.remove(ruta_temporal)
+
+            except Exception as e:
+                # Si hay error, lo mostramos limpio
+                st.error(f"❌ Ocurrió un error durante el análisis: {str(e)}")
